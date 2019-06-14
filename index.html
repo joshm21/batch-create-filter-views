@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/buefy/dist/buefy.min.css">
+  <link rel="stylesheet" href="https://cdn.materialdesignicons.com/2.0.46/css/materialdesignicons.min.css">
+  <style>
+    #app {
+      padding: 10px;
+      width: 320px;
+      margin: 0 auto;
+    }
+
+    ol, ul {
+      list-style-position: inside;
+    }
+
+    ul {
+      list-style-type: disc;
+    }
+
+    .has-margin-x {
+      margin-left: 1rem;
+      margin-right: 1rem;
+    }
+
+  </style>
+</head>
+
+<body class="has-background-white-ter">
+  <div id="app" class="box">
+
+    <form>
+
+      <b-field label="Spreadsheet Link">
+        <b-input @input="onSpreadsheetUrl" v-model="spreadsheetUrl" placeholder="Paste link here"></b-input>
+      </b-field>
+
+      <b-field label="Sheet Name">
+        <b-select @change="onSheetName" v-model="sheetName" :loading="isLoadingSheetNames" expanded ref="selectSheetName">
+          <option v-for="sheetName in sheetNames" :value="sheetName" :key="sheetName">
+            {{ sheetName }}
+          </option>
+        </b-select>
+      </b-field>
+
+      <b-field label="Header Row">
+        <b-input type="number" min="1" @change="onHeaderRow" v-model="headerRow"></b-input>
+      </b-field>
+
+      <b-field label="Filter Names">
+        <b-input type="textarea" v-model="filterNames" placeholder="one per line&#10;you can paste from a spreadsheet" id="filterNames"></b-input>
+      </b-field>
+
+      <div class="field">
+        <div class="label">Sort Rules</div>
+        <div class="has-margin-x">
+          <div v-if="sortRules.length == 0" class="field">None</div>
+          <div v-else class="field">
+            <ol>
+              <li v-for="sortRule in sortRules">
+                {{ sortRule.column }} ({{ sortRule.order }}) <a @click="delSortRule(sortRule.column)" class="delete"></a>
+              </li>
+            </ol>
+          </div>
+
+          <div class="box">
+
+            <b-field label="Sort Column">
+              <b-select v-model="sortColumn" expanded>
+                <option v-for="column in remainingSortColumns" :value="column" :key="column" :loading="isLoadingColumnNames">
+                  {{ column }}
+                </option>
+              </b-select>
+            </b-field>
+
+            <b-field label="Sort Order">
+              <b-select v-model="sortOrder" expanded>
+                <option v-for="order in sortOrders" :value="order" :key="order">
+                  {{ order }}
+                </option>
+              </b-select>
+            </b-field>
+
+            <b-button @click="addSortRule" type="is-success" :disabled="!canAddSortRule">Add</b-button>
+
+          </div>
+
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">Filter Rules</div>
+        <div class="has-margin-x">
+          <div v-if="Object.keys(filterRules).length == 0" class="field">None</div>
+          <div v-else class="field">
+            <ul>
+              <li v-for="filterRule in filterRules">
+                {{ filterRule.column }} {{ filterRule.readable }} {{ filterRule.value }} <a @click="delFilterRule(filterRule.column)"
+                  class="delete"></a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="box">
+
+            <b-field label="Filter Column">
+              <b-select v-model="filterColumn" expanded>
+                <option v-for="column in remainingFilterColumns" :value="column" :key="column" :loading="isLoadingColumnNames">
+                  {{ column }}
+                </option>
+              </b-select>
+            </b-field>
+
+            <b-field label="Filter Type">
+              <b-select v-model="filterType" expanded>
+                <option v-for="filterType in filterTypes" :value="filterType.value" :key="filterType.value">
+                  {{ filterType.readable }}
+                </option>
+              </b-select>
+            </b-field>
+
+            <b-field>
+              <template slot="label">
+                Filter Value
+                <b-tooltip type="is-dark" v-bind:label="helpText" multilined>
+                  <b-icon size="is-small" icon="help-circle-outline"></b-icon>
+                </b-tooltip>
+              </template>
+              <b-input v-model="filterValue" placeholder="Enter text or [Filter Name]"></b-input>
+            </b-field>
+
+            <b-button @click="addFilterRule" type="is-success" :disabled="!canAddFilterRule">Add</b-button>
+
+          </div>
+
+        </div>
+      </div>
+
+      <div class="buttons">
+        <b-button @click="onCreateFilterViews" type="is-primary" class="is-fullwidth" :disabled="!canCreateFilterViews" :loading="isCreatingFilterViews">Create
+          Filter Views</b-button>
+        <b-button @click="onDeleteFilterViews" type="is-danger" class="is-fullwidth" :disabled="!canDeleteFilterViews">Delete
+          All Filter Views</b-button>
+      </div>
+
+    </form>
+    
+    <br>
+    Source code available <a href="https://github.com/josh-meinders/batch-create-filter-views" target="_blank">here on GitHub</a>
+    
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+  <script src="https://unpkg.com/buefy/dist/buefy.min.js"></script>
+
+  <script>
+    var vm = new Vue({
+      el: "#app",
+      data: {
+        spreadsheetUrl: "",
+        isLoadingSheetNames: false,
+        sheetNames: [],
+        sheetName: "",
+        headerRow: 1,
+        filterNames: "",
+        isLoadingColumnNames: false,
+        columnNames: [],
+        sortRules: [],
+        sortColumn: "",
+        sortOrders: ["Ascending", "Descending"],
+        sortOrder: "Ascending",
+        filterRules: {},
+        filterColumn: "",
+        filterTypes: {
+          TEXT_EQ: { readable: "is", value: "TEXT_EQ" },
+          TEXT_CONTAINS: { readable: "contains", value: "TEXT_CONTAINS" },
+          TEXT_NOT_CONTAINS: { readable: "doesn't contain", value: "TEXT_NOT_CONTAINS" },
+          TEXT_STARTS_WITH: { readable: "begins with", value: "TEXT_STARTS_WITH" },
+          TEXT_ENDS_WITH: { readable: "ends with", value: "TEXT_ENDS_WITH" },
+          NUMBER_EQ: { readable: "=", value: "NUMBER_EQ" },
+          NUMBER_NOT_EQ: { readable: "!=", value: "NUMBER_NOT_EQ" },
+          NUMBER_GREATER: { readable: ">", value: "NUMBER_GREATER" },
+          NUMBER_GREATER_THAN_EQ: { readable: ">=", value: "NUMBER_GREATER_THAN_EQ" },
+          NUMBER_LESS: { readable: "<", value: "NUMBER_LESS" },
+          NUMBER_LESS_THAN_EQ: { readable: "<=", value: "NUMBER_LESS_THAN_EQ" },
+          DATE_EQ: { readable: "date is", value: "DATE_EQ" },
+          DATE_BEFORE: { readable: "date is before", value: "DATE_BEFORE" },
+          DATE_ON_OR_BEFORE: { readable: "date is on or before", value: "DATE_ON_OR_BEFORE" },
+          DATE_ON_OR_AFTER: { readable: "date is on or after", value: "DATE_ON_OR_AFTER" },
+          DATE_AFTER: { readable: "date is after", value: "DATE_AFTER" },
+          ONE_OF_RANGE: { readable: "found in range", value: "ONE_OF_RANGE" },
+          CUSTOM_FORMULA: { readable: "custom formula is", value: "CUSTOM_FORMULA" }
+        },
+        filterType: "TEXT_EQ",
+        filterValue: "",
+        isCreatingFilterViews: false
+      },
+      computed: {
+        remainingSortColumns: function () {
+          var used = this.sortRules.map(function(rule) { return rule.column })
+          var remaining = this.columnNames.filter(function (columnName) {
+            return used.indexOf(columnName) == -1
+          })
+          return remaining
+        },
+        numRemainingSortColumns: function () {
+          return this.remainingSortColumns.length
+        },
+        sortIndex: function () {
+          return this.remainingSortColumns.indexOf(this.sortColumn)
+        },
+        nextSortindex: function () {
+          if ((this.sortIndex + 1) == this.numRemainingSortColumns) {
+            return this.sortIndex - 1
+          } else {
+            return this.sortIndex + 1
+          }
+        },
+        remainingFilterColumns: function () {
+          var used = Object.keys(this.filterRules)
+          var remaining = this.columnNames.filter(function (columnName) {
+            return used.indexOf(columnName) == -1
+          })
+          return remaining
+        },
+        numRemainingFilterColumns: function () {
+          return this.remainingFilterColumns.length
+        },
+        filterIndex: function () {
+          return this.remainingFilterColumns.indexOf(this.filterColumn)
+        },
+        nextFilterindex: function () {
+          if ((this.filterIndex + 1) == this.numRemainingFilterColumns) {
+            return this.filterIndex - 1
+          } else {
+            return this.filterIndex + 1
+          }
+        },
+        helpText: function () {
+          var anyText = "Enter any text to use the same filter value for each filter view. "
+          var filterText = "Enter '[Filter Name]' to use a different filter value for each filter view "
+          var column = this.filterColumn == "" ? "this column's value" : this.filterColumn
+          var parenthesis = "(each filter view will only show rows where " + column + " " + this.filterTypes[this.filterType].readable + " the filter view's name)."
+          return anyText + filterText + parenthesis
+        },
+        canGetSheetNames: function () {
+          if (this.spreadsheetUrl == "") {
+            return false
+          }
+          return true
+        },
+        canGetColumnNames: function () {
+          if (this.spreadsheetUrl == "" || this.sheetName == "") {
+            return false
+          }
+          return true
+        },
+        canAddSortRule: function () {
+          if (this.numRemainingSortColumns == 0) {
+            return false
+          }
+
+          return true
+        },
+        canAddFilterRule: function () {
+          if (this.numRemainingFilterColumns == 0 || this.filterValue == "") {
+            return false
+          }
+          return true
+        },
+        canCreateFilterViews: function () {
+          if (this.spreadsheetUrl == "" || this.sheetName == "" || this.filterNames == "") {
+            return false;
+          } else {
+            return true;
+          }
+        },
+        canDeleteFilterViews: function () {
+          if (this.spreadsheetUrl == "" || this.sheetName == "") {
+            return false;
+          } else {
+            return true;
+          }
+        }
+      },
+      methods: {
+        onSpreadsheetUrl: function (event) {
+          this.sheetName = ""
+          this.sheetNames = []
+          this.sortRules = []
+          this.filterRules = {}
+          if (this.canGetSheetNames) {
+            this.isLoadingSheetNames = true;
+            google.script.run
+              .withFailureHandler(function () {
+                this.isLoadingSheetNames = false
+                this.serverError
+              })
+              .withSuccessHandler(this.updateSheetNames)
+              .getSheetNames(this.spreadsheetUrl);
+          }
+        },
+        updateSheetNames: function (sheetNames) {
+          this.sheetNames = sheetNames
+          this.sheetName = this.sheetNames[0]
+          this.isLoadingSheetNames = false;
+          this.onSheetName()
+        },
+        onSheetName: function () {
+          if (this.canGetColumnNames) {
+            this.loadColumnNames()
+          }
+        },
+        onHeaderRow: function (event) {
+          if (this.canGetColumnNames) {
+            this.loadColumnNames()
+          }
+        },
+        loadColumnNames: function () {
+          this.isLoadingColumnNames = true
+          google.script.run
+            .withFailureHandler(function () {
+              this.isLoadingColumnNames = false
+              this.serverError
+            })
+            .withSuccessHandler(this.updateColumnNames)
+            .getColumnNames(this.spreadsheetUrl, this.sheetName, this.headerRow)
+        },
+        updateColumnNames: function (columnNames) {
+          this.columnNames = columnNames
+          this.isLoadingColumnNames = false
+          this.sortColumn = columnNames[0]
+          this.filterColumn = columnNames[0]
+        },
+        addSortRule: function () {
+          var sortRule = {
+            column: this.sortColumn,
+            order: this.sortOrder
+          }
+          this.sortRules.push(sortRule);
+          this.sortColumn = this.remainingSortColumns[this.nextSortindex]
+        },
+        delSortRule: function (column) {
+          for (var i = this.sortRules.length - 1; i >= 0; --i ) {            
+            if (this.sortRules[i].column == column) {
+              this.sortRules.splice(i, 1);
+            }
+          }
+          if (this.numRemainingSortColumns == 1) {
+            this.sortColumn = this.remainingSortColumns[0]
+          }
+        },
+        addFilterRule: function () {
+          var filterRule = {
+            column: this.filterColumn,
+            type: this.filterType,
+            readable: this.filterTypes[this.filterType].readable,
+            value: this.filterValue
+          }
+          Vue.set(vm.filterRules, this.filterColumn, filterRule)
+          this.filterColumn = this.remainingFilterColumns[this.nextFilterindex]
+          this.filterValue = ""
+        },
+        delFilterRule: function (column) {
+          Vue.delete(vm.filterRules, column)
+          if (this.numRemainingFilterColumns == 1) {
+            this.filterColumn = this.remainingFilterColumns[0]
+          }
+        },
+        onCreateFilterViews: function () {
+          this.isCreatingFilterViews = true
+          if (this.canCreateFilterViews) {
+            google.script.run
+              .withFailureHandler(function() {
+                this.isCreatingFilterViews = false
+                this.serverError()
+              })
+              .withSuccessHandler(this.successCreatingFilterViews)
+              .createFilterViews(this.spreadsheetUrl, this.sheetName, this.headerRow, this.columnNames, this.filterNames.split("\n"), this.sortRules, this.filterRules)
+          }
+        },
+        successCreatingFilterViews: function (filterViewData) {
+          this.isCreatingFilterViews = false
+          window.alert("Successfully created filter views and added logs with the links to each filter view on the 'Filter View Logs' sheet");
+        },
+        onDeleteFilterViews: function () {
+          if (this.canDeleteFilterViews) {
+            if (confirm("Are you sure you want to delete all filter views?")) {
+              google.script.run
+                .withFailureHandler(this.serverError)
+                .withSuccessHandler(function () { window.alert("Successfully deleted all filter views!") }).deleteFilterViews(this.spreadsheetUrl, this.sheetName)
+            }
+          }
+        },
+        serverError: function () {
+          window.alert("Unexpected error while connecting to spreadsheet")
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>
