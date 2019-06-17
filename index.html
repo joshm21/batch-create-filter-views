@@ -39,7 +39,7 @@
       </b-field>
 
       <b-field label="Sheet Name">
-        <b-select @change="onSheetName" v-model="sheetName" :loading="isLoadingSheetNames" expanded ref="selectSheetName">
+        <b-select @input="onSheetName" v-model="sheetName" :loading="isLoadingSheetNames" expanded>
           <option v-for="sheetName in sheetNames" :value="sheetName" :key="sheetName">
             {{ sheetName }}
           </option>
