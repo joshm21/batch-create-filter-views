@@ -47,7 +47,7 @@
       </b-field>
 
       <b-field label="Header Row">
-        <b-input type="number" min="1" @change="onHeaderRow" v-model="headerRow"></b-input>
+        <b-input type="number" min="1" @input="onHeaderRow" v-model="headerRow"></b-input>
       </b-field>
 
       <b-field label="Filter Names">
@@ -330,10 +330,19 @@
             .getColumnNames(this.spreadsheetUrl, this.sheetName, this.headerRow)
         },
         updateColumnNames: function (columnNames) {
-          this.columnNames = columnNames
+          columnNames = JSON.parse(columnNames)
+          if (columnNames == null) {
+            this.columnNames = []
+            this.sortColumn = ""
+            this.filterColumn = ""
+          } else {
+            this.columnNames = columnNames
+            this.sortColumn = columnNames[0]
+            this.filterColumn = columnNames[0]
+          }
+          this.sortRules = []
+          this.filterRules = {}
           this.isLoadingColumnNames = false
-          this.sortColumn = columnNames[0]
-          this.filterColumn = columnNames[0]
         },
         addSortRule: function () {
           var sortRule = {
