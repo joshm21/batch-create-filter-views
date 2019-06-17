@@ -14,7 +14,7 @@ function getSheetNames(spreadsheetUrl) {
 
 function getColumnNames(spreadsheetUrl, sheetName, headerRow) {
   var columnNames = SpreadsheetApp.openByUrl(spreadsheetUrl).getSheetByName(sheetName).getDataRange().getValues()[headerRow - 1];
-  return columnNames;
+  return JSON.stringify(columnNames);
 }
 
 function createFilterViews(spreadsheetUrl, sheetName, headerRow, columnNames, filterNames, sortRules, filterRules) {
