@@ -1,8 +1,25 @@
 function doGet(e) {
-  var template = HtmlService.createTemplateFromFile("index");
-  return template.evaluate()
-    .addMetaTag("viewport", "width=device-width, initial-scale=1, shrink-to-fit=no")
-    .setTitle("Batch Create Filter Views");
+  
+  if (e.queryString && 'jsonpCallback' in e.parameter){
+    var cbFnName = e.parameter['jsonpCallback'];
+    var scriptText = "window." + cbFnName + "();";
+    return ContentService.createTextOutput(scriptText).setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  
+  else if (e.queryString && ('auth' in e.parameter || 'redirect' in e.parameter)){
+    var rawHtml = '<p>You have successfully logged in! Please close this tab and refresh the previous page.</p>';
+    if ('redirect' in e.parameter){
+      rawHtml += '<br/><a href="' + e.parameter['redirect'] + '">Previous Page</a>';
+    }
+    return HtmlService.createHtmlOutput(rawHtml);
+  }
+  else {
+    var template = HtmlService.createTemplateFromFile("index");
+    return template.evaluate()
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag("viewport", "width=device-width, initial-scale=1, shrink-to-fit=no")
+      .setTitle("Batch Create Filter Views");
+  }
 }
 
 function getSheetNames(spreadsheetUrl) {
