@@ -79,6 +79,7 @@ function createFilterViews(spreadsheetUrl, sheetName, headerRow, columnNames, fi
         }
       }
     }
+    
     requests.push(filterViewRequest);
   }
 
@@ -112,7 +113,9 @@ function logCreateFilterViews_(response, sheetName, sortRules, filterRules) {
   var data = response.replies.map(function(singleResponse) {
     var filter = singleResponse.addFilterView.filter;
     var name = filter.title;
-    var link = spreadsheetUrl + "#gid=" + filter.range.sheetId.toString() + "&fvid=" + filter.filterViewId.toString();
+    var sheetId = filter.range.sheetId || 0;
+    var filterViewIdString = filter.filterViewId.toString()
+    var link = spreadsheetUrl + "#gid=" + sheetId.toString() + "&fvid=" + filterViewIdString;
     var range = sheetName + "!" + toColumnLetter_(filter.range.startColumnIndex + 1) + (filter.range.startRowIndex + 1) + ":" + toColumnLetter_(filter.range.endColumnIndex) + filter.range.endRowIndex;   
     var sheetSortRules = sortRules.map(function(rule) {
       return rule.column + " (" + rule.order + ")";
